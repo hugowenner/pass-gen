@@ -1,20 +1,30 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { copyClipboard, decryptPayload, readShareMetadata, ShareMetadata } from "@/lib/crypto";
-import QRCode from "@/components/QRCode";
+import { copyClipboard, revealSharedPassword } from "@/lib/crypto";
 import Toast, { ToastState } from "@/components/Toast";
 
-export default function PasswordViewer() {
-  const [token, setToken] = useState<string | null>(null);
-  const [meta, setMeta] = useState<ShareMetadata | null>(null);
-  const [linkError, setLinkError] = useState<string | null>(null);
+interface PasswordViewerProps {
+  token: string;
+}
 
-  const [passphrase, setPassphrase] = useState("");
-  const [senha, setSenha] = useState<string | null>(null);
-  const [revealError, setRevealError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [showQr, setShowQr] = useState(false);
+type ViewState =
+  | { status: "loading" }
+  | { status: "invalid" }
+  | { status: "expired"; empresa: string }
+  | { status: "ready"; empresa: string; senha: string };
+
+function Spinner() {
+  return (
+    <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white" />
+  );
+}
+
+export default function PasswordViewer({ token }: PasswordViewerProps) {
+  const [state, setState] = useState<ViewState>({ status: "loading" });
+  const [revealed, setRevealed] = useState(false);
+  const [revealing, setRevealing] = useState(false);
+  const [copied, setCopied] = useState(false);
   const [toast, setToast] = useState<ToastState | null>(null);
 
   function notify(kind: ToastState["kind"], message: string) {
@@ -23,148 +33,98 @@ export default function PasswordViewer() {
   }
 
   useEffect(() => {
-    const hash = window.location.hash;
-    const extracted = hash.startsWith("#") ? hash.slice(1) : hash;
+    revealSharedPassword(token)
+      .then((result) => {
+        if (result.expired) {
+          setState({ status: "expired", empresa: result.empresa });
+        } else {
+          setState({ status: "ready", empresa: result.empresa, senha: result.senha });
+        }
+      })
+      .catch(() => setState({ status: "invalid" }));
+  }, [token]);
 
-    if (!extracted) {
-      setLinkError("Nenhum link seguro foi encontrado nesta URL.");
-      return;
-    }
-
-    setToken(extracted);
-
-    try {
-      setMeta(readShareMetadata(extracted));
-    } catch {
-      setLinkError("Link inválido ou corrompido.");
-    }
-  }, []);
-
-  async function handleReveal() {
-    if (!token) return;
-    setRevealError(null);
-    setLoading(true);
-    try {
-      const plaintext = await decryptPayload(token, passphrase);
-      setSenha(plaintext);
-    } catch (err) {
-      setRevealError(err instanceof Error ? err.message : "Não foi possível revelar a senha.");
-    } finally {
-      setLoading(false);
-      // A chave de proteção só existe em memória local, nunca é persistida.
-      setPassphrase("");
-    }
+  function handleReveal() {
+    setRevealing(true);
+    setTimeout(() => {
+      setRevealed(true);
+      setRevealing(false);
+    }, 350);
   }
 
-  async function handleCopySenha() {
-    if (!senha) return;
+  async function handleCopy(senha: string) {
     const ok = await copyClipboard(senha);
-    notify(ok ? "success" : "error", ok ? "Senha copiada!" : "Não foi possível copiar.");
+    if (ok) {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1800);
+    } else {
+      notify("error", "Não foi possível copiar.");
+    }
   }
 
-  function handleClearSenha() {
-    setSenha(null);
-    setShowQr(false);
-  }
-
-  if (linkError) {
+  if (state.status === "loading") {
     return (
-      <div className="mx-auto max-w-md rounded-2xl border border-red-500/30 bg-red-500/10 p-6 text-center text-red-300 animate-fade-in">
-        {linkError}
-      </div>
-    );
-  }
-
-  if (!meta) {
-    return (
-      <div className="mx-auto max-w-md rounded-2xl border border-slate-800 bg-slate-900/60 p-6 text-center text-slate-400">
+      <div className="mx-auto rounded-2xl border border-slate-800/80 bg-slate-900/60 p-8 text-center text-sm text-slate-400 shadow-xl shadow-black/20 backdrop-blur-xl">
         Carregando...
       </div>
     );
   }
 
-  return (
-    <div className="mx-auto max-w-md space-y-4 animate-fade-in">
-      <div className="rounded-2xl border border-slate-800 bg-slate-900/60 p-6 shadow-xl">
-        <div className="mb-4 flex items-center gap-2 text-slate-100">
-          <span className="text-xl">🔒</span>
-          <h2 className="text-lg font-semibold">Senha protegida</h2>
-        </div>
+  if (state.status === "invalid") {
+    return (
+      <div className="animate-fade-in mx-auto rounded-2xl border border-red-500/30 bg-red-500/10 p-8 text-center text-sm text-red-300 shadow-xl shadow-black/20">
+        Link inválido ou corrompido.
+      </div>
+    );
+  }
 
-        <dl className="mb-5 space-y-1 text-sm">
-          <div className="flex justify-between">
-            <dt className="text-slate-400">Empresa</dt>
-            <dd className="font-medium text-slate-200">{meta.empresa}</dd>
-          </div>
-          <div className="flex justify-between">
-            <dt className="text-slate-400">Criada</dt>
-            <dd className="font-medium text-slate-200">
-              {meta.data} às {meta.hora}
-            </dd>
-          </div>
+  return (
+    <div className="space-y-4">
+      <section className="animate-fade-in rounded-2xl border border-slate-800/80 bg-slate-900/60 p-6 shadow-xl shadow-black/20 backdrop-blur-xl sm:p-8">
+        <h2 className="mb-6 flex items-center gap-2 text-base font-semibold text-slate-100">
+          <span className="text-xl">🔒</span> Senha protegida
+        </h2>
+
+        <dl className="mb-6 flex items-center justify-between rounded-xl border border-slate-800 bg-slate-950/40 px-4 py-3 text-sm">
+          <dt className="text-slate-500">Empresa</dt>
+          <dd className="font-medium text-slate-100">{state.empresa}</dd>
         </dl>
 
-        {!senha ? (
-          <div className="space-y-3">
-            <div>
-              <label className="mb-1 block text-sm font-medium text-slate-300">
-                Digite a chave
-              </label>
-              <input
-                type="password"
-                value={passphrase}
-                onChange={(e) => setPassphrase(e.target.value)}
-                placeholder="********"
-                onKeyDown={(e) => e.key === "Enter" && handleReveal()}
-                className="w-full rounded-xl border border-slate-700 bg-slate-800/60 px-3 py-2 text-slate-100 outline-none transition focus:border-brand-500 focus:ring-1 focus:ring-brand-500"
-              />
-            </div>
-
-            {revealError && <p className="text-sm text-red-400">{revealError}</p>}
-
-            <button
-              onClick={handleReveal}
-              disabled={loading || passphrase.length === 0}
-              className="w-full rounded-xl bg-brand-600 py-2.5 font-medium text-white transition hover:bg-brand-500 disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              {loading ? "Descriptografando..." : "Revelar senha"}
-            </button>
+        {state.status === "expired" ? (
+          <div className="flex items-center gap-2 rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-300">
+            <span>⏱️</span> Este link expirou.
           </div>
         ) : (
-          <div className="space-y-4 animate-fade-in">
+          <div className="space-y-4">
             <div>
-              <span className="mb-1 block text-sm font-medium text-slate-300">Senha</span>
-              <code className="block break-all rounded-xl border border-slate-700 bg-slate-800/60 px-3 py-2 font-mono text-lg text-brand-300">
-                {senha}
+              <label className="mb-1.5 block text-xs font-medium uppercase tracking-wide text-slate-500">
+                {revealed ? "Senha revelada" : "Senha"}
+              </label>
+              <code className="block break-all rounded-xl border border-slate-800 bg-slate-950/60 px-4 py-3 font-mono text-lg tracking-wide text-brand-300 shadow-inner shadow-black/30">
+                {revealed ? state.senha : "█".repeat(Math.max(state.senha.length, 10))}
               </code>
             </div>
 
-            <div className="flex gap-2">
+            {!revealed ? (
               <button
-                onClick={handleCopySenha}
-                className="flex-1 rounded-xl bg-brand-600 py-2.5 text-sm font-medium text-white transition hover:bg-brand-500"
+                onClick={handleReveal}
+                disabled={revealing}
+                className="flex w-full items-center justify-center gap-2 rounded-xl bg-brand-600 py-3 text-sm font-semibold text-white shadow-lg shadow-brand-600/20 transition hover:bg-brand-500 hover:shadow-brand-500/30 disabled:cursor-not-allowed disabled:opacity-70"
               >
-                Copiar senha
+                {revealing && <Spinner />}
+                👁 Mostrar senha
               </button>
+            ) : (
               <button
-                onClick={() => setShowQr((v) => !v)}
-                className="flex-1 rounded-xl border border-slate-700 bg-slate-800 py-2.5 text-sm font-medium text-slate-200 transition hover:bg-slate-700"
+                onClick={() => handleCopy(state.senha)}
+                className="w-full rounded-xl bg-brand-600 py-3 text-sm font-semibold text-white shadow-lg shadow-brand-600/20 transition hover:bg-brand-500 hover:shadow-brand-500/30 active:scale-[0.99]"
               >
-                {showQr ? "Ocultar QR" : "Gerar QR Code"}
+                {copied ? "✓ Senha copiada" : "Copiar senha"}
               </button>
-            </div>
-
-            {showQr && <QRCode value={window.location.href} />}
-
-            <button
-              onClick={handleClearSenha}
-              className="w-full rounded-xl border border-slate-700 py-2 text-sm font-medium text-slate-400 transition hover:bg-slate-800"
-            >
-              Limpar da tela
-            </button>
+            )}
           </div>
         )}
-      </div>
+      </section>
 
       <Toast toast={toast} />
     </div>

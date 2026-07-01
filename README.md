@@ -1,36 +1,26 @@
 # 🔑 Password Secure Generator
 
-Aplicação web para **gerar e compartilhar senhas com segurança**, sem banco de dados, sem login e sem servidor de armazenamento. Toda a criptografia acontece no navegador do usuário usando a **Web Crypto API** nativa.
+Aplicação web simples para **gerar uma senha e compartilhar por link**, sem banco de dados, sem login e sem painel administrativo. A criptografia acontece no navegador com a **Web Crypto API** nativa.
 
 ## Como funciona
 
-1. Você gera uma senha localmente (usando `crypto.getRandomValues`, nunca `Math.random`).
-2. Ao clicar em **"🔐 Criar Link Seguro"**, você define uma chave de proteção (ou deixa o app gerar uma automaticamente).
-3. A senha é criptografada no navegador com **AES-256-GCM**, usando uma chave derivada da chave de proteção via **PBKDF2** (250.000 iterações, salt aleatório).
-4. O resultado é convertido em Base64 (URL-safe) e vira um token colocado **no fragmento da URL** (`/view#TOKEN`), que nunca é enviado a nenhum servidor.
-5. Você envia o link e a chave de proteção (por canais separados) para outra pessoa.
-6. Essa pessoa abre o link, informa a chave, e a senha é **descriptografada somente no navegador dela**.
+1. Você preenche empresa/tamanho/opções e clica em **"Gerar senha"**.
+2. Clica em **"Criar Link"** — a senha (empresa, senha e data de criação) é criptografada no navegador com **AES-256-GCM** e vira um token na URL: `/view/TOKEN`.
+3. Você copia e envia o link para outra pessoa.
+4. Essa pessoa abre o link, vê a empresa e a senha oculta, e clica em **"👁 Mostrar senha"** para revelar (sem precisar de senha ou chave extra).
+5. O link **expira sozinho em 24 horas** — depois disso a página mostra "Este link expirou." e a senha nunca é exibida.
 
-O servidor (Vercel) nunca recebe, processa ou armazena a senha, a chave de proteção ou o conteúdo decifrado — ele apenas serve os arquivos estáticos da aplicação.
+Não há backend, banco de dados, login ou API: a senha só existe dentro do próprio token do link.
 
-## Garantias de segurança
+## O que foi removido na simplificação
 
-- ❌ Sem banco de dados.
-- ❌ Sem login / sistema de usuários.
-- ❌ Sem API externa.
-- ❌ Sem cookies com dados sensíveis.
-- ❌ Sem `localStorage` para dados sensíveis.
-- ✅ Todo o payload sensível trafega apenas no fragmento `#` da URL (nunca enviado ao servidor em requisições HTTP).
-- ✅ Criptografia AES-256-GCM com chave derivada por PBKDF2 (salt e IV aleatórios por link).
-- ✅ Geração de senhas e chaves usando exclusivamente `crypto.getRandomValues`.
-- ✅ QR Code gerado localmente (biblioteca client-side, sem chamada a serviços externos).
+Este projeto já teve uma versão com chave de proteção manual (PBKDF2 + senha de confirmação) e QR Code. Essa camada extra foi removida a pedido para deixar o fluxo direto: **gerar senha → criar link → abrir → mostrar senha**, sem etapas de configuração de chave.
 
 ## Tecnologias
 
 - [Next.js](https://nextjs.org/) (App Router) + React + TypeScript
 - [Tailwind CSS](https://tailwindcss.com/)
-- Web Crypto API (nativa do navegador)
-- [`qrcode`](https://www.npmjs.com/package/qrcode) para geração local de QR Code
+- Web Crypto API (nativa do navegador) — AES-256-GCM
 
 ## Estrutura de pastas
 
@@ -41,16 +31,15 @@ src/
     page.tsx           # página inicial (gerador)
     globals.css
     view/
-      page.tsx         # página de visualização (/view)
+      [token]/
+        page.tsx       # página de visualização (/view/TOKEN)
   components/
     PasswordGenerator.tsx
-    ShareModal.tsx
     PasswordViewer.tsx
-    QRCode.tsx
     Toast.tsx
   lib/
-    crypto.ts           # PBKDF2 + AES-256-GCM + geração de chave
-    password.ts          # geração de senha e cálculo de força
+    crypto.ts           # AES-256-GCM + expiração de 24h
+    password.ts          # geração de senha
 ```
 
 ## Rodando localmente
@@ -78,7 +67,7 @@ npm run start
 1. Suba este projeto para um repositório no GitHub, GitLab ou Bitbucket.
 2. Acesse [vercel.com](https://vercel.com/) e crie uma conta gratuita (pode usar login com GitHub).
 3. Clique em **"Add New… → Project"** e selecione o repositório.
-4. A Vercel detecta automaticamente que é um projeto Next.js — não é necessário configurar nada (build command `next build`, output automático).
+4. A Vercel detecta automaticamente que é um projeto Next.js — não é necessário configurar nada.
 5. Clique em **Deploy**. Em poucos minutos você recebe uma URL pública (`https://seu-projeto.vercel.app`).
 
 ### Opção 2 — via CLI da Vercel
@@ -86,31 +75,20 @@ npm run start
 ```bash
 npm install -g vercel
 vercel login
-vercel
-```
-
-Siga as instruções no terminal. Para publicar em produção:
-
-```bash
 vercel --prod
 ```
 
-Nenhuma variável de ambiente, banco de dados ou serviço adicional é necessário — o projeto é 100% estático/client-side.
+Nenhuma variável de ambiente, banco de dados ou serviço adicional é necessário.
 
 ## Funções principais (`lib/`)
 
 | Função | Arquivo | Descrição |
 |---|---|---|
 | `generatePassword()` | `lib/password.ts` | Gera senha aleatória respeitando categorias e tamanho |
-| `calculatePasswordStrength()` | `lib/password.ts` | Calcula a força da senha gerada |
-| `createSecurePayload()` | `lib/crypto.ts` | Cria os metadados (empresa, data, hora) do compartilhamento |
-| `encryptPayload()` | `lib/crypto.ts` | Deriva chave via PBKDF2 e criptografa a senha com AES-256-GCM |
-| `decryptPayload()` | `lib/crypto.ts` | Descriptografa a senha a partir do token e da chave de proteção |
-| `readShareMetadata()` | `lib/crypto.ts` | Lê empresa/data/hora do token sem precisar da chave |
-| `generateKey()` | `lib/crypto.ts` | Gera uma chave de proteção aleatória (`XXXX-XXXX-XXXX-XXXX`) |
+| `createShareLink()` | `lib/crypto.ts` | Criptografa empresa + senha + data com AES-256-GCM e retorna o token do link |
+| `revealSharedPassword()` | `lib/crypto.ts` | Descriptografa o token e verifica se passou de 24 horas |
 | `copyClipboard()` | `lib/crypto.ts` | Copia texto para a área de transferência |
 
 ## Aviso importante
 
-Guarde a chave de proteção com cuidado: sem ela, **não há como recuperar a senha** a partir do link — nem mesmo o próprio aplicativo consegue, pois a chave nunca é armazenada em nenhum lugar.
-# pass-gen
+Qualquer pessoa com o link consegue ver a senha (não há chave extra) — trate o link como se fosse a própria senha. Ele deixa de funcionar automaticamente depois de 24 horas.

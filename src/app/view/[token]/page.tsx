@@ -1,6 +1,12 @@
-import PasswordGenerator from "@/components/PasswordGenerator";
+import PasswordViewer from "@/components/PasswordViewer";
 
-export default function Home() {
+interface ViewPageProps {
+  params: Promise<{ token: string }>;
+}
+
+export default async function ViewPage({ params }: ViewPageProps) {
+  const { token } = await params;
+
   return (
     <main className="relative flex min-h-screen flex-col items-center overflow-hidden px-4 py-16 sm:py-20">
       <div className="pointer-events-none absolute inset-x-0 top-[-10%] -z-10 h-[420px] bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-brand-600/25 via-transparent to-transparent blur-3xl" />
@@ -14,11 +20,11 @@ export default function Home() {
             Password Secure
           </h1>
           <p className="mt-2 text-sm text-slate-400">
-            Compartilhe senhas de forma simples e segura.
+            Acesso temporário e seguro — este link expira em 24 horas.
           </p>
         </header>
 
-        <PasswordGenerator />
+        <PasswordViewer token={token} />
       </div>
     </main>
   );
