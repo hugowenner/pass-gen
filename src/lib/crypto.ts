@@ -5,17 +5,20 @@
  */
 
 const IV_LENGTH = 12; // bytes recomendado para AES-GCM
-const EXPIRATION_MS = 24 * 60 * 60 * 1000; // 24 horas
+export const EXPIRATION_MS = 24 * 60 * 60 * 1000; // 24 horas
 
 export interface SharedPassword {
   empresa: string;
+  identificacao: string;
   senha: string;
   createdAt: number; // epoch ms
 }
 
 export interface RevealResult {
   empresa: string;
+  identificacao: string;
   senha: string;
+  createdAt: number;
   expired: boolean;
 }
 
@@ -50,12 +53,17 @@ function fromUrlSafeBase64(input: string): string {
 }
 
 /**
- * Criptografa a senha (empresa + senha + data de criação) com AES-256-GCM
- * e retorna um token pronto para ir na URL (/view/TOKEN).
+ * Criptografa a senha (empresa + identificação + senha + data de criação)
+ * com AES-256-GCM e retorna um token pronto para ir na URL (/view/TOKEN).
  */
-export async function createShareLink(empresa: string, senha: string): Promise<string> {
+export async function createShareLink(
+  empresa: string,
+  identificacao: string,
+  senha: string
+): Promise<string> {
   const payload: SharedPassword = {
     empresa: empresa.trim() || "Sem nome",
+    identificacao: identificacao.trim(),
     senha,
     createdAt: Date.now(),
   };
@@ -111,7 +119,9 @@ export async function revealSharedPassword(token: string): Promise<RevealResult>
 
   return {
     empresa: payload.empresa,
+    identificacao: payload.identificacao ?? "",
     senha: expired ? "" : payload.senha,
+    createdAt: payload.createdAt,
     expired,
   };
 }
@@ -125,5 +135,43 @@ export async function copyClipboard(text: string): Promise<boolean> {
     return true;
   } catch {
     return false;
+  }
+}
+
+/**
+ * Formata o tempo restante até a expiração (ex: "23h 59min").
+ */
+export function formatRemaining(msRemaining: number): string {
+  if (msRemaining <= 0) return "Expirado";
+  const totalMinutes = Math.floor(msRemaining / 60000);
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+  return `${hours}h ${minutes}min`;
+}
+
+/**
+ * Formata uma data/hora no padrão "DD/MM/AAAA às HH:MM".
+ */
+export function formatDateTime(timestamp: number): string {
+  const date = new Date(timestamp);
+  const dataStr = date.toLocaleDateString("pt-BR");
+  const horaStr = date.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+  return `${dataStr} às ${horaStr}`;
+}
+
+/**
+ * Encurta visualmente um link para exibição, mantendo o link real intacto
+ * (usado apenas para copiar/abrir). Ex: .../view/eyJrIjoi…9In0
+ */
+export function truncateLink(url: string): string {
+  try {
+    const parsed = new URL(url);
+    const segments = parsed.pathname.split("/");
+    const token = segments.pop() ?? "";
+    const base = `${parsed.origin}${segments.join("/")}/`;
+    if (token.length <= 16) return `${base}${token}`;
+    return `${base}${token.slice(0, 8)}…${token.slice(-6)}`;
+  } catch {
+    return url;
   }
 }
