@@ -69,7 +69,11 @@ export default function PasswordViewer({ token }: PasswordViewerProps) {
     return () => clearInterval(id);
   }, [state.status]);
 
-  function handleReveal() {
+  function handleToggleReveal() {
+    if (revealed) {
+      setRevealed(false);
+      return;
+    }
     setRevealing(true);
     setTimeout(() => {
       setRevealed(true);
@@ -138,23 +142,22 @@ export default function PasswordViewer({ token }: PasswordViewerProps) {
               </code>
             </div>
 
-            {!revealed ? (
+            <div className="flex gap-3">
               <button
-                onClick={handleReveal}
+                onClick={handleToggleReveal}
                 disabled={revealing}
-                className="flex w-full items-center justify-center gap-2 rounded-xl bg-brand-600 py-3 text-sm font-semibold text-white shadow-lg shadow-brand-600/20 transition hover:bg-brand-500 hover:shadow-brand-500/30 disabled:cursor-not-allowed disabled:opacity-70"
+                className="flex flex-1 items-center justify-center gap-2 rounded-xl border border-slate-700 bg-slate-800/60 py-3 text-sm font-semibold text-slate-100 transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-70"
               >
                 {revealing && <Spinner />}
-                👁 Mostrar senha
+                {!revealing && (revealed ? "🙈 Ocultar" : "👁 Mostrar")}
               </button>
-            ) : (
               <button
                 onClick={() => handleCopy(state.senha)}
-                className="w-full rounded-xl bg-brand-600 py-3 text-sm font-semibold text-white shadow-lg shadow-brand-600/20 transition hover:bg-brand-500 hover:shadow-brand-500/30 active:scale-[0.99]"
+                className="flex-1 rounded-xl bg-brand-600 py-3 text-sm font-semibold text-white shadow-lg shadow-brand-600/20 transition hover:bg-brand-500 hover:shadow-brand-500/30 active:scale-[0.99]"
               >
-                {copied ? "✓ Senha copiada" : "Copiar"}
+                {copied ? "✓ Copiada" : "Copiar"}
               </button>
-            )}
+            </div>
 
             <div className="flex items-center justify-between rounded-xl border border-slate-800 bg-slate-950/40 px-4 py-3 text-xs">
               <div>
